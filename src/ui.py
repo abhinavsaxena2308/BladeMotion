@@ -91,10 +91,11 @@ class UIRenderer:
         # Buttons – built once
         cx = self.w // 2
         self._menu_buttons = {
-            "start":   Button(cx, self.h // 2 + 20,  320, 60, "▶  START GAME"),
-            "instruct":Button(cx, self.h // 2 + 100, 320, 60, "ℹ  HOW TO PLAY"),
-            "camera":  Button(cx, self.h // 2 + 180, 320, 60, "📷  SELECT CAMERA"),
-            "exit":    Button(cx, self.h // 2 + 260, 320, 60, "✕  EXIT",
+            "classic": Button(cx, self.h // 2 - 20,  320, 55, "▶  CLASSIC MODE"),
+            "zen":     Button(cx, self.h // 2 + 50,  320, 55, "☯  ZEN MODE", color=(30, 50, 40), hover_color=(40, 80, 60), border=COLOR_GREEN),
+            "instruct":Button(cx, self.h // 2 + 120, 320, 55, "ℹ  HOW TO PLAY"),
+            "camera":  Button(cx, self.h // 2 + 190, 320, 55, "📷  CAMERA TOGGLE"),
+            "exit":    Button(cx, self.h // 2 + 260, 320, 55, "✕  EXIT",
                               color=(60, 20, 20), hover_color=(100, 30, 30),
                               border=COLOR_DANGER),
         }
@@ -145,7 +146,15 @@ class UIRenderer:
 
     def draw_hud(self, score: int, high_score: int, lives: int,
                  level: int, fps: float, combo: int = 1,
-                 camera_ok: bool = True):
+                 camera_ok: bool = True, time_left: int = -1, cam_surf: pygame.Surface = None):
+        
+        # Camera PiP
+        if camera_ok and cam_surf:
+            pip_w, pip_h = 240, 135
+            scaled_cam = pygame.transform.scale(cam_surf, (pip_w, pip_h))
+            self.screen.blit(scaled_cam, (self.w - pip_w - 20, self.h - pip_h - 20))
+            pygame.draw.rect(self.screen, (255, 255, 255, 60), (self.w - pip_w - 20, self.h - pip_h - 20, pip_w, pip_h), 2, border_radius=4)
+        
         # Score
         self._glow_text(f"{score:06d}", self._hud_font,
                         self.w // 2, 30, COLOR_SCORE, anchor="midtop")
@@ -154,15 +163,21 @@ class UIRenderer:
                                          (180, 180, 180))
         self.screen.blit(hs_txt, (self.w // 2 - hs_txt.get_width() // 2, 60))
 
-        # Level
-        lv_txt = self._hud_font.render(f"LVL {level}", True, COLOR_ACCENT)
+        # Level / Time
+        if time_left >= 0:
+            secs = time_left // 60
+            color = COLOR_DANGER if secs <= 10 else COLOR_ACCENT
+            lv_txt = self._hud_font.render(f"TIME {secs}s", True, color)
+        else:
+            lv_txt = self._hud_font.render(f"LVL {level}", True, COLOR_ACCENT)
         self.screen.blit(lv_txt, (20, 16))
 
         # Lives (hearts)
-        for i in range(MAX_LIVES):
-            color = COLOR_LIFE_ON if i < lives else COLOR_LIFE_OFF
-            hx    = self.w - 40 - (MAX_LIVES - 1 - i) * 38
-            self._draw_heart(hx, 28, 14, color)
+        if time_left < 0:
+            for i in range(MAX_LIVES):
+                color = COLOR_LIFE_ON if i < lives else COLOR_LIFE_OFF
+                hx    = self.w - 40 - (MAX_LIVES - 1 - i) * 38
+                self._draw_heart(hx, 28, 14, color)
 
         # FPS
         fps_txt = self._small_font.render(f"FPS {int(fps)}", True, (80, 80, 80))

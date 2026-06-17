@@ -37,6 +37,7 @@ SPAWN_INTERVAL_MIN  = 28
 
 # ─── Lives & difficulty ───────────────────────────────────────────────────────
 MAX_LIVES            = 3
+ZEN_MODE_DURATION    = 90 * 60  # 90 seconds in frames (at 60 FPS)
 POINTS_PER_LEVEL     = 100
 BOMB_CHANCE_BASE     = 0.08  # 8 % chance a spawn is a bomb
 BOMB_CHANCE_MAX      = 0.22
@@ -74,11 +75,15 @@ COLOR_BTN_BORDER  = (80, 180, 255)
 COLOR_DANGER      = (255, 60, 60)
 COLOR_GREEN       = (60, 220, 120)
 
-# ─── Particle ─────────────────────────────────────────────────────────────────
+# ─── Particle & Effects ───────────────────────────────────────────────────────
 PARTICLE_COUNT_SLICE   = 18
 PARTICLE_COUNT_BOMB    = 40
 PARTICLE_LIFESPAN      = 35   # frames
 PARTICLE_SPEED_MAX     = 8
+
+SPLATTER_COUNT_MAX     = 30   # Max splatters on screen at once
+SHAKE_INTENSITY_BOMB   = 25   # Screen shake amplitude
+SHAKE_INTENSITY_COMBO  = 12
 
 # ─── Fruit definitions (name, size_class, radius) ────────────────────────────
 FRUIT_DEFS = [

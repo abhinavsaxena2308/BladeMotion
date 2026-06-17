@@ -15,18 +15,42 @@ from src.settings import (
 class BladeTrail:
     def __init__(self):
         self._pts: deque[tuple[int, int]] = deque(maxlen=TRAIL_LENGTH)
+        self._sparks = []
 
     def add(self, pt: tuple[int, int]):
         if pt:
             self._pts.append(pt)
+            # Emit sparks occasionally
+            import random
+            if random.random() < 0.3:
+                self._sparks.append({
+                    "x": pt[0] + random.uniform(-10, 10),
+                    "y": pt[1] + random.uniform(-10, 10),
+                    "vx": random.uniform(-1, 1),
+                    "vy": random.uniform(-1, 2),
+                    "life": 25
+                })
 
     def clear(self):
         self._pts.clear()
+        self._sparks.clear()
 
     def get_points(self) -> list[tuple[int, int]]:
         return list(self._pts)
 
     def draw(self, surface: pygame.Surface):
+        # Update and draw sparks
+        for s in self._sparks:
+            s["x"] += s["vx"]
+            s["y"] += s["vy"]
+            s["life"] -= 1
+            if s["life"] > 0:
+                alpha = int(255 * (s["life"] / 25))
+                # draw tiny spark
+                pygame.draw.circle(surface, (*TRAIL_GLOW_COLOR, alpha), (int(s["x"]), int(s["y"])), 2)
+        
+        self._sparks = [s for s in self._sparks if s["life"] > 0]
+
         pts = list(self._pts)
         n   = len(pts)
         if n < 2:

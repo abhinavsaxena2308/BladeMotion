@@ -47,7 +47,8 @@ class Game:
         # ── pygame init ──────────────────────────────────────────────────────
         pygame.init()
         flags = pygame.FULLSCREEN | pygame.SCALED if fullscreen else pygame.RESIZABLE
-        self.screen  = pygame.display.set_mode((SCREEN_W, SCREEN_H), flags)
+        self.window  = pygame.display.set_mode((SCREEN_W, SCREEN_H), flags)
+        self.screen  = pygame.Surface((SCREEN_W, SCREEN_H))
         pygame.display.set_caption(TITLE)
         self.clock   = pygame.time.Clock()
 
@@ -62,6 +63,8 @@ class Game:
 
         # ── state ────────────────────────────────────────────────────────────
         self.state   = ST_MENU
+        self.is_zen_mode = False
+        self.show_camera = True
         self._bomb_game_over = False  # flagged when bomb was hit
         self._reset_game_vars()
         self._high_score = self._load_high_score()
@@ -86,10 +89,12 @@ class Game:
     # ─── Game variable reset ─────────────────────────────────────────────────
 
     def _reset_game_vars(self):
+        from src.settings import ZEN_MODE_DURATION
         self.score          = 0
         self.lives          = MAX_LIVES
         self.level          = 1
         self.frame          = 0
+        self.time_left      = ZEN_MODE_DURATION if getattr(self, 'is_zen_mode', False) else -1
         self.spawn_timer    = 0
         self.fruits: list[Fruit | Bomb] = []
         self.halves: list[FruitHalf]    = []
@@ -172,7 +177,7 @@ class Game:
             count = random.randint(2, 3)
 
         for _ in range(count):
-            if random.random() < self._bomb_chance():
+            if not self.is_zen_mode and random.random() < self._bomb_chance():
                 self.fruits.append(Bomb(self._speed_mult()))
             else:
                 defn = random.choice(FRUIT_DEFS)
@@ -248,16 +253,11 @@ class Game:
         pos = self._get_blade_pos()
         self.blade.add(pos)
 
-        # Camera debug overlay
-        if self.camera_ok and self.debug:
+        # Camera preview update
+        if self.camera_ok:
             frame = self.tracker.get_frame()
             if frame is not None:
-                small = pygame.transform.scale(
-                    pygame.surfarray.make_surface(
-                        np.transpose(frame, (1, 0, 2))
-                    ), (320, 180)
-                )
-                self._cam_surf = small
+                self._cam_surf = pygame.surfarray.make_surface(np.transpose(frame, (1, 0, 2)))
 
         # Spawn
         self._try_spawn()
@@ -271,8 +271,9 @@ class Game:
         # Missed fruits → lose life
         for f in list(self.fruits):
             if isinstance(f, Fruit) and f.missed:
-                self.lives -= 1
-                self.fx.add_missed_text(f.x, SCREEN_H - 40)
+                if not self.is_zen_mode:
+                    self.lives -= 1
+                    self.fx.add_missed_text(f.x, SCREEN_H - 40)
                 self.fruits.remove(f)
             elif f.missed:
                 self.fruits.remove(f)
@@ -294,16 +295,27 @@ class Game:
         if self.score > self._high_score:
             self._high_score = self.score
 
-        # Check game over
-        if self.lives <= 0:
-            self.audio.play("gameover")
-            self._save_high_score()
-            self.state = ST_GAME_OVER
+        # Zen Mode Timer
+        if self.is_zen_mode:
+            self.time_left -= 1
+            if self.time_left <= 0:
+                self.audio.play("gameover")
+                self._save_high_score()
+                self.state = ST_GAME_OVER
+        else:
+            # Check game over
+            if self.lives <= 0:
+                self.audio.play("gameover")
+                self._save_high_score()
+                self.state = ST_GAME_OVER
 
     # ─── Draw (playing state) ─────────────────────────────────────────────────
 
     def _draw_playing(self):
         self.screen.blit(self._bg, (0, 0))
+
+        # Background effects (Splatters)
+        self.fx.draw_bg_effects(self.screen)
 
         # Halves (behind whole fruits)
         for h in self.halves:
@@ -319,18 +331,14 @@ class Game:
         # Blade
         self.blade.draw(self.screen)
 
-        # Debug cam
-        if self._cam_surf and self.debug:
-            self.screen.blit(self._cam_surf, (SCREEN_W - 324, SCREEN_H - 184))
-            pygame.draw.rect(self.screen, (80, 180, 255),
-                             (SCREEN_W - 326, SCREEN_H - 186, 324, 184), 2)
-
-        # HUD
+        # HUD (PiP camera is drawn inside draw_hud)
         combo = min(self._combo_count, max(COMBO_MULTIPLIERS.keys()))
+        cam_surf = self._cam_surf if self.show_camera else None
         self.ui.draw_hud(
             self.score, self._high_score, self.lives,
             self.level, self.clock.get_fps(),
             combo=combo, camera_ok=self.camera_ok,
+            time_left=self.time_left, cam_surf=cam_surf
         )
 
     # ─── Main loop ───────────────────────────────────────────────────────────
@@ -360,12 +368,16 @@ class Game:
             # ── State machine ───────────────────────────────────────────────
             if self.state == ST_MENU:
                 action = self.ui.draw_main_menu(events, self._high_score)
-                if action == "start":
+                if action == "classic":
+                    self.is_zen_mode = False
+                    self._start_game()
+                elif action == "zen":
+                    self.is_zen_mode = True
                     self._start_game()
                 elif action == "instruct":
                     self.state = ST_INSTRUCT
                 elif action == "camera":
-                    self.state = ST_CAMERA_SEL
+                    self.show_camera = not self.show_camera
                 elif action == "exit":
                     running = False
 
@@ -421,6 +433,14 @@ class Game:
                     self._start_game()
                 elif action == "menu":
                     self.state = ST_MENU
+
+            # ── Draw screen with shake ──────────────────────────────────────
+            if self.fx.shake_timer > 0:
+                dx = random.randint(-self.fx.shake_intensity, self.fx.shake_intensity)
+                dy = random.randint(-self.fx.shake_intensity, self.fx.shake_intensity)
+                self.window.blit(self.screen, (dx, dy))
+            else:
+                self.window.blit(self.screen, (0, 0))
 
             pygame.display.flip()
             self.clock.tick(FPS_TARGET)

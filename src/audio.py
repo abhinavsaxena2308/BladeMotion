@@ -42,13 +42,13 @@ def _make_sound(arr: np.ndarray) -> pygame.mixer.Sound:
     return pygame.sndarray.make_sound(np.ascontiguousarray(stereo))
 
 
-def _synth_slice() -> pygame.mixer.Sound:
-    """Whoosh + high click."""
+def _synth_slice(pitch_mult: float = 1.0) -> pygame.mixer.Sound:
+    """Whoosh + high click. Allows pitch variance."""
     sr   = 44100
     dur  = 0.18
     n    = int(sr * dur)
     t    = np.linspace(0, dur, n)
-    freq = np.linspace(1200, 300, n)
+    freq = np.linspace(1200 * pitch_mult, 300 * pitch_mult, n)
     wave = 0.35 * np.sin(2 * math.pi * np.cumsum(freq) / sr)
     env  = np.exp(-t * 18)
     click = 0.25 * (np.random.random(n) * 2 - 1) * np.exp(-t * 60)
@@ -112,7 +112,7 @@ class AudioManager:
     def __init__(self):
         self.music_volume  = VOLUME_MUSIC
         self.sfx_volume    = VOLUME_SFX
-        self._sounds: dict[str, pygame.mixer.Sound] = {}
+        self._sounds: dict[str, pygame.mixer.Sound | list[pygame.mixer.Sound]] = {}
         self._music_sound: pygame.mixer.Sound | None = None
         self._music_channel: pygame.mixer.Channel | None = None
         self._ok = False
@@ -134,20 +134,32 @@ class AudioManager:
                 return pygame.mixer.Sound(path)
             return None
 
-        self._sounds["slice"]     = try_load("slice.wav")     or _synth_slice()
+        # Pre-generate 3 variations of slice sound
+        self._sounds["slice"] = [
+            try_load("slice.wav") or _synth_slice(0.9),
+            try_load("slice.wav") or _synth_slice(1.0),
+            try_load("slice.wav") or _synth_slice(1.15),
+        ]
         self._sounds["explosion"] = try_load("explosion.wav") or _synth_explosion()
         self._sounds["combo"]     = try_load("combo.wav")     or _synth_combo()
         self._sounds["gameover"]  = try_load("gameover.wav")  or _synth_gameover()
         self._music_sound         = try_load("menu_music.wav") or _synth_menu_music()
 
-        for snd in self._sounds.values():
-            snd.set_volume(self.sfx_volume)
+        for key, snd in self._sounds.items():
+            if isinstance(snd, list):
+                for s in snd:
+                    s.set_volume(self.sfx_volume)
+            else:
+                snd.set_volume(self.sfx_volume)
 
     def play(self, name: str):
         if not self._ok:
             return
         snd = self._sounds.get(name)
-        if snd:
+        if isinstance(snd, list):
+            import random
+            random.choice(snd).play()
+        elif snd:
             snd.play()
 
     def start_music(self, loop: bool = True):
@@ -167,5 +179,9 @@ class AudioManager:
 
     def set_sfx_volume(self, vol: float):
         self.sfx_volume = max(0.0, min(1.0, vol))
-        for snd in self._sounds.values():
-            snd.set_volume(self.sfx_volume)
+        for key, snd in self._sounds.items():
+            if isinstance(snd, list):
+                for s in snd:
+                    s.set_volume(self.sfx_volume)
+            else:
+                snd.set_volume(self.sfx_volume)
