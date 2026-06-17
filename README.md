@@ -1,43 +1,51 @@
-# 🍉 BladeMotion – Hand Tracking Fruit Ninja
+<div align="center">
+  <h1>🍉 BladeMotion</h1>
+  <p><b>An Augmented Reality Hand-Tracking Fruit Ninja Clone</b></p>
 
-> Slice fruits with your bare hand. A webcam-based Fruit Ninja clone powered by **MediaPipe**, **OpenCV**, and **Pygame**.
+  <p>
+    <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python" alt="Python Version"/></a>
+    <a href="https://developers.google.com/mediapipe"><img src="https://img.shields.io/badge/MediaPipe-0.10+-orange?style=for-the-badge&logo=google" alt="MediaPipe"/></a>
+    <a href="https://www.pygame.org"><img src="https://img.shields.io/badge/Pygame-2.6+-green?style=for-the-badge&logo=python" alt="Pygame"/></a>
+  </p>
+</div>
+
+Slice fruits with your bare hands! BladeMotion uses **MediaPipe** and **OpenCV** to track your index finger in real-time, overlaying a glowing blade trail directly onto your webcam feed for an immersive Augmented Reality (AR) experience. Built entirely in Python using **Pygame**.
 
 ---
 
 ## ✨ Features
 
-| Feature | Details |
-|---|---|
-| **Hand tracking** | Real-time MediaPipe Hands – index fingertip as blade |
-| **Glowing blade trail** | Multi-layer glow + motion blur effect |
-| **7 fruit types** | Apple · Banana · Orange · Watermelon · Pineapple · Cherry · Strawberry |
-| **Bomb mechanic** | Instant game-over with explosion animation |
-| **Combo system** | 2× · 3× · 5× multipliers for multi-slice swipes |
-| **Progressive difficulty** | Level 1–4+, faster fruits & more bombs each level |
-| **Particle effects** | Juice splatter, explosion sparks, floating score text |
-| **Procedural audio** | Synthesised sounds – no external audio files needed |
-| **Procedural art** | PIL-generated fruit images – no external downloads |
-| **Mouse fallback** | Fully playable without a webcam |
-| **High score** | Persisted in `data/highscore.json` |
-| **Screenshot** | Press **F12** to save a screenshot |
-| **Debug mode** | Press **D** to toggle hand landmark overlay |
+- **Augmented Reality (AR)**: The game uses your webcam feed as the full-screen background, allowing you to physically slice fruits falling in your room.
+- **Zero-Latency Hand Tracking**: Powered by the modern MediaPipe Tasks API (`HandLandmarker`) running on a dedicated background thread.
+- **Two Game Modes**:
+  - **Classic**: Standard 3 lives. Bombs cause instant game-over.
+  - **Zen Mode**: 90 seconds on the clock, no bombs, pure slicing for the highest score.
+- **Procedural Generation**:
+  - **Art**: All 7 fruit types and bomb sprites are generated mathematically via `Pillow` on first launch. No image downloads required!
+  - **Audio**: Dynamic slice "swoosh" sounds and explosions are synthesised with random pitch variations using `NumPy`.
+- **Advanced Visual FX**: Multi-layered glowing blade trail, dynamic screen shake, hit-flash combos, and persistent juice splatters.
+- **Combo System**: 2×, 3×, and Frenzy multipliers for multi-slice swipes.
+- **Auto-Setup**: The game automatically downloads the required MediaPipe model (`~7.5MB`) on first launch.
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Clone / enter the project
+### 1. Clone the repository
 
 ```bash
-cd d:\projects\LimbNinja
+git clone https://github.com/abhinavsaxena2308/BladeMotion.git
+cd BladeMotion
 ```
 
-### 2. Create & activate a virtual environment (recommended)
+### 2. Create a virtual environment (Recommended)
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate          # Windows PowerShell
-# source .venv/bin/activate     # macOS / Linux
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
 ```
 
 ### 3. Install dependencies
@@ -51,6 +59,7 @@ pip install -r requirements.txt
 ```bash
 python main.py
 ```
+*(The game will automatically generate all visual assets and download the tracking model on the very first run).*
 
 ---
 
@@ -58,11 +67,10 @@ python main.py
 
 | Action | How |
 |---|---|
-| **Slice** | Move your index fingertip across a fruit |
+| **Slice** | Move your index fingertip across a fruit (or use your mouse) |
 | **Pause / Unpause** | `Esc` |
 | **Fullscreen** | `F11` |
 | **Screenshot** | `F12` |
-| **Debug overlay** | `D` |
 
 ---
 
@@ -71,23 +79,19 @@ python main.py
 ```
 python main.py [OPTIONS]
 
-  --camera INT      Camera index to use (default: 0)
-  --mouse           Force mouse-only mode (no webcam required)
+  --camera INT      Camera device index to use (default: 0)
+  --mouse           Force mouse-only mode (disable webcam)
   --fullscreen      Launch in fullscreen
-  --debug           Show hand landmarks & webcam feed overlay
 ```
 
 ### Examples
 
 ```bash
-# Play with second webcam
+# Play with a secondary webcam
 python main.py --camera 1
 
-# Play without a webcam (use mouse)
+# Play on a laptop without a webcam (uses mouse cursor)
 python main.py --mouse
-
-# Fullscreen + debug overlay
-python main.py --fullscreen --debug
 ```
 
 ---
@@ -95,29 +99,27 @@ python main.py --fullscreen --debug
 ## 📁 Project Structure
 
 ```
-LimbNinja/
+BladeMotion/
 │
-├── main.py                  # Entry point
+├── main.py                  # Entry point (CLI parsing & asset generation)
 ├── requirements.txt
 ├── README.md
 │
 ├── src/
 │   ├── __init__.py
-│   ├── settings.py          # All constants & config
-│   ├── game.py              # Core game engine & state machine
-│   ├── fruit.py             # Fruit / Bomb physics & collision
-│   ├── blade.py             # Glowing blade trail renderer
-│   ├── effects.py           # Particle system & floating text
-│   ├── hand_tracker.py      # MediaPipe hand tracking (background thread)
-│   ├── audio.py             # Synthesised audio manager
-│   ├── ui.py                # All screens (menu, pause, game-over, HUD)
-│   └── asset_gen.py         # Procedural PIL asset generator
+│   ├── settings.py          # Configuration (colors, gravity, difficulty)
+│   ├── game.py              # Core Game Engine & State Machine
+│   ├── fruit.py             # Fruit / Bomb physics & slice collision
+│   ├── blade.py             # Glowing multi-layer blade renderer
+│   ├── effects.py           # Particles, splatters, and screen shake
+│   ├── hand_tracker.py      # Background MediaPipe LIVE_STREAM tracker
+│   ├── audio.py             # NumPy synthesised procedural audio
+│   ├── ui.py                # Menus, HUD, and bouncy animations
+│   └── asset_gen.py         # Procedural PIL sprite generator
 │
-├── assets/
-│   ├── fruits/              # Auto-generated fruit & bomb PNGs
-│   ├── sounds/              # Drop your own .wav files here (optional)
-│   ├── backgrounds/         # Custom background images (optional)
-│   └── fonts/               # Custom font files (optional)
+├── assets/                  
+│   ├── fruits/              # Auto-generated PNG sprites
+│   └── hand_landmarker.task # Auto-downloaded MediaPipe model
 │
 └── data/
     └── highscore.json       # Persisted high score
@@ -125,56 +127,22 @@ LimbNinja/
 
 ---
 
-## 🎨 Customisation
-
-### Custom sounds
-Drop `.wav` files into `assets/sounds/`:
-- `slice.wav` – fruit slice
-- `explosion.wav` – bomb
-- `combo.wav` – combo hit
-- `gameover.wav` – game over
-- `menu_music.wav` – background music
-
-### Custom backgrounds
-Place any `.png` or `.jpg` into `assets/backgrounds/` – future update will load them.
-
-### Tweak difficulty
-Edit `src/settings.py`:
-- `GRAVITY` – how fast fruits fall back down
-- `SPAWN_INTERVAL_BASE` – frames between fruit spawns
-- `BOMB_CHANCE_BASE` – starting bomb probability
-- `COMBO_WINDOW_FRAMES` – how many frames count as "one swipe"
-
----
-
 ## 🛠️ Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| Camera not found | Run `python main.py --mouse` or `--camera 1` |
-| `mediapipe` import error | `pip install mediapipe` (needs Python ≤ 3.11 on some builds) |
-| Slow / choppy | Close other apps; hand tracking runs on a separate thread |
-| No sound | Check your audio device; the game synthesises all sounds internally |
-| Black screen | Ensure pygame is installed: `pip install pygame` |
-
----
-
-## 📦 Dependencies
-
-```
-opencv-python   ≥ 4.8
-mediapipe       ≥ 0.10
-pygame          ≥ 2.5
-numpy           ≥ 1.24
-Pillow          ≥ 10.0
-```
+| Camera not found | Run `python main.py --mouse` or try `--camera 1` |
+| `mediapipe` import error | Ensure you are on Python `3.9`, `3.10`, or `3.11`. MediaPipe may have issues on `3.12+`. |
+| Tracking is laggy | Ensure your environment is well-lit. The tracker thread runs independently to prevent game lag. |
+| No sound | Check your OS audio device; the game synthesises all sounds internally. |
 
 ---
 
 ## 📝 License
 
-MIT – do whatever you like.
+MIT License – Feel free to modify and build upon this!
 
 ---
-
-*Made with ✂️ + 🍉 in Python*
+<div align="center">
+  <i>Made with ✂️ + 🍉 in Python</i>
+</div>
