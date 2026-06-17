@@ -1,9 +1,15 @@
 """
-BladeMotion – Hand Tracker
-Wraps MediaPipe Hands and exposes index-finger-tip position + velocity.
-Falls back gracefully to mouse mode if no camera is available.
+BladeMotion – Hand Tracker  (MediaPipe 0.10+ Tasks API)
+========================================================
+MediaPipe 0.10+ removed mp.solutions in favour of mp.tasks.
+This module uses the new HandLandmarker Tasks API with a LIVE_STREAM
+running mode so inference happens on the camera thread and results
+are delivered via callback — zero blocking on the main thread.
+
+Falls back to mouse mode gracefully if camera or model is unavailable.
 """
 
+import os
 import threading
 import time
 import logging
@@ -14,10 +20,16 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
+# Path to the bundled hand landmarker model
+_MODEL_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "assets", "hand_landmarker.task",
+)
+
 
 class HandTracker:
     """
-    Runs camera capture + MediaPipe inference on a background thread.
+    Runs camera capture + MediaPipe HandLandmarker on a background thread.
     Main thread reads self.tip_pos (normalised 0-1) and self.landmarks.
     """
 
@@ -26,41 +38,62 @@ class HandTracker:
         self.debug        = debug
 
         self.tip_pos: Optional[Tuple[float, float]] = None   # (norm_x, norm_y)
-        self.landmarks: List                         = []
+        self.landmarks: list                         = []
         self.frame_rgb: Optional[np.ndarray]         = None  # latest camera frame (RGB)
 
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._lock    = threading.Lock()
         self._cap: Optional[cv2.VideoCapture] = None
-        self._mp_hands  = None
-        self._hands_obj = None
+        self._detector = None
+        self._frame_ts = 0          # monotonic timestamp in ms for Tasks API
 
-        # camera availability
-        self.camera_ok  = False
+        self.camera_ok = False
 
     # ──────────────────────────────────────────────────────────────────────────
     def start(self) -> bool:
-        """Initialise camera and start background thread. Returns True on success."""
-        try:
-            import mediapipe as mp
-            self._mp_hands  = mp.solutions.hands
-            self._hands_obj = self._mp_hands.Hands(
-                static_image_mode=False,
-                max_num_hands=1,
-                min_detection_confidence=0.6,
-                min_tracking_confidence=0.5,
+        """Initialise camera and MediaPipe detector. Returns True on success."""
+        if not os.path.exists(_MODEL_PATH):
+            log.warning(
+                "Hand landmarker model not found at: %s\n"
+                "Run: python -c \"import urllib.request; "
+                "urllib.request.urlretrieve("
+                "'https://storage.googleapis.com/mediapipe-models/"
+                "hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',"
+                " 'assets/hand_landmarker.task')\"",
+                _MODEL_PATH,
             )
-        except Exception as e:
-            log.warning("MediaPipe unavailable: %s", e)
             return False
 
+        try:
+            from mediapipe.tasks import python as mp_python
+            from mediapipe.tasks.python import vision as mp_vision
+
+            base_options = mp_python.BaseOptions(model_asset_path=_MODEL_PATH)
+            options = mp_vision.HandLandmarkerOptions(
+                base_options=base_options,
+                running_mode=mp_vision.RunningMode.LIVE_STREAM,
+                num_hands=1,
+                min_hand_detection_confidence=0.55,
+                min_hand_presence_confidence=0.55,
+                min_tracking_confidence=0.50,
+                result_callback=self._on_result,
+            )
+            self._detector = mp_vision.HandLandmarker.create_from_options(options)
+            log.info("HandLandmarker detector created (Tasks API).")
+        except Exception as e:
+            log.warning("MediaPipe Tasks API unavailable: %s", e)
+            return False
+
+        # Open camera
         self._cap = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
         if not self._cap.isOpened():
             self._cap = cv2.VideoCapture(self.camera_index)
 
         if not self._cap.isOpened():
             log.warning("Camera %d not available.", self.camera_index)
+            if self._detector:
+                self._detector.close()
             return False
 
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH,  640)
@@ -71,7 +104,7 @@ class HandTracker:
         self._running  = True
         self._thread   = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
-        log.info("Hand tracker started on camera %d.", self.camera_index)
+        log.info("Hand tracker started (camera %d, Tasks API).", self.camera_index)
         return True
 
     def stop(self):
@@ -80,44 +113,52 @@ class HandTracker:
             self._thread.join(timeout=2)
         if self._cap:
             self._cap.release()
-        if self._hands_obj:
-            self._hands_obj.close()
+        if self._detector:
+            self._detector.close()
 
     # ──────────────────────────────────────────────────────────────────────────
+    def _on_result(self, result, mp_image, timestamp_ms: int):
+        """Callback fired by MediaPipe on the detection thread."""
+        tip  = None
+        lmks = []
+
+        if result.hand_landmarks:
+            hand = result.hand_landmarks[0]   # list of NormalizedLandmark
+            lmks = hand
+            # index finger tip = landmark 8
+            tip  = (hand[8].x, hand[8].y)
+
+        with self._lock:
+            self.tip_pos   = tip
+            self.landmarks = lmks
+
     def _run_loop(self):
+        from mediapipe import Image as MpImage, ImageFormat
+
         while self._running:
             ok, frame = self._cap.read()
             if not ok:
                 time.sleep(0.01)
                 continue
 
-            # mirror so it feels natural
+            # Mirror so movement feels natural
             frame = cv2.flip(frame, 1)
             rgb   = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            rgb.flags.writeable = False
-            result = self._hands_obj.process(rgb)
-            rgb.flags.writeable = True
 
-            tip  = None
-            lmks = []
-
-            if result.multi_hand_landmarks:
-                hand = result.multi_hand_landmarks[0]
-                lmks = hand.landmark
-                # index finger tip = landmark 8
-                tip  = (hand.landmark[8].x, hand.landmark[8].y)
-
-                if self.debug:
-                    import mediapipe as mp
-                    mp.solutions.drawing_utils.draw_landmarks(
-                        frame, hand,
-                        mp.solutions.hands.HAND_CONNECTIONS,
-                    )
-
+            # Store camera frame for debug overlay
             with self._lock:
-                self.tip_pos    = tip
-                self.landmarks  = lmks
-                self.frame_rgb  = rgb.copy()
+                self.frame_rgb = rgb.copy()
+
+            # Build MediaPipe image and run async detection
+            mp_img = MpImage(image_format=ImageFormat.SRGB, data=rgb)
+            self._frame_ts += 1          # must be strictly increasing (ms)
+            try:
+                self._detector.detect_async(mp_img, self._frame_ts)
+            except Exception as e:
+                log.debug("detect_async error: %s", e)
+
+            # ~30 FPS cadence
+            time.sleep(0.033)
 
     # ──────────────────────────────────────────────────────────────────────────
     def get_tip(self) -> Optional[Tuple[float, float]]:

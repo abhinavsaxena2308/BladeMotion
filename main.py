@@ -15,6 +15,22 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src.asset_gen import generate_all_assets
 generate_all_assets()
 
+# ── MediaPipe model download (runs once if model missing) ─────────────────────
+_MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "assets", "hand_landmarker.task")
+_MODEL_URL  = ("https://storage.googleapis.com/mediapipe-models/"
+               "hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task")
+
+if not os.path.exists(_MODEL_PATH):
+    import urllib.request
+    print("Downloading MediaPipe hand landmarker model (~6 MB)…")
+    try:
+        urllib.request.urlretrieve(_MODEL_URL, _MODEL_PATH)
+        print("Model downloaded successfully.")
+    except Exception as e:
+        print(f"WARNING: Could not download model ({e}). Camera will be disabled.")
+        print("         Run with --mouse to play without webcam.")
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
