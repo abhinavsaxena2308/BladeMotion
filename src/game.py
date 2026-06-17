@@ -312,7 +312,16 @@ class Game:
     # ─── Draw (playing state) ─────────────────────────────────────────────────
 
     def _draw_playing(self):
-        self.screen.blit(self._bg, (0, 0))
+        # Draw camera feed as background if available, otherwise use gradient
+        if self.camera_ok and self._cam_surf and self.show_camera:
+            scaled_cam = pygame.transform.scale(self._cam_surf, (SCREEN_W, SCREEN_H))
+            self.screen.blit(scaled_cam, (0, 0))
+            # Add a slight dark overlay so the game elements pop out
+            overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 120))
+            self.screen.blit(overlay, (0, 0))
+        else:
+            self.screen.blit(self._bg, (0, 0))
 
         # Background effects (Splatters)
         self.fx.draw_bg_effects(self.screen)
@@ -331,14 +340,14 @@ class Game:
         # Blade
         self.blade.draw(self.screen)
 
-        # HUD (PiP camera is drawn inside draw_hud)
+        # HUD
         combo = min(self._combo_count, max(COMBO_MULTIPLIERS.keys()))
-        cam_surf = self._cam_surf if self.show_camera else None
+        # PiP disabled since camera is now the background
         self.ui.draw_hud(
             self.score, self._high_score, self.lives,
             self.level, self.clock.get_fps(),
             combo=combo, camera_ok=self.camera_ok,
-            time_left=self.time_left, cam_surf=cam_surf
+            time_left=self.time_left, cam_surf=None
         )
 
     # ─── Main loop ───────────────────────────────────────────────────────────
